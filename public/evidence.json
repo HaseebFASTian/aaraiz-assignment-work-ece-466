@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at_utc": "2026-11-10T08:22:38Z",
+  "updated_at_utc": "2026-11-10T10:34:35Z",
   "project": {
     "id": "ece466-hw6",
     "title": "Global Project Assignment",
@@ -69,7 +69,7 @@
       "id": "Q2c",
       "title": "Simple RNN decoder",
       "description": "Keep ResNet50, replace the LSTM with a simple RNN, and compare training metrics.",
-      "status": "pending",
+      "status": "awaiting_baseline",
       "criterion": "A completed full epoch and measured comparison with the baseline.",
       "evidence_ids": [
         "simple_rnn"
@@ -1106,10 +1106,31 @@
         "decoder": "rnn",
         "feature_size": 2048,
         "memory_format": "channels_last",
-        "status": "pending",
+        "status": "complete",
         "pretrained_weights": "ImageNet IMAGENET1K_V1",
-        "completion_detail": "Completed full-epoch result not yet available.",
-        "final_metrics": null
+        "completion_detail": "Verified complete epoch result.",
+        "final_metrics": {
+          "epoch": 1,
+          "loss": 2.7449962149562914,
+          "perplexity": 15.564555019552024,
+          "captions": 591753,
+          "batches": 2348,
+          "tokens": 7871788,
+          "seconds": 17238.849457665347
+        },
+        "epochs": 1,
+        "history": [
+          {
+            "epoch": 1,
+            "loss": 2.7449962149562914,
+            "perplexity": 15.564555019552024,
+            "captions": 591753,
+            "batches": 2348,
+            "tokens": 7871788,
+            "seconds": 17238.849457665347
+          }
+        ],
+        "training_results_sha256": "3a4a402095652751542116c28eeae140cc49127c90dab6684ae950abf87a6c37"
       }
     ],
     "metric_definition": "Full-epoch token-weighted online cross-entropy; perplexity equals exp(loss). Partial-epoch values are progress only.",
@@ -1288,6 +1309,12 @@
         "title": "GoogLeNet + LSTM complete training results",
         "sha256": "9e9ef3f940f05f5c50dc155a732613f95f1281e95f8d3afcc9bef37780cc50d7",
         "verification": "Complete epoch, data/protocol and source fingerprint reviewed"
+      },
+      {
+        "id": "simple_rnn_caption_metrics",
+        "title": "ResNet50 + RNN complete training results",
+        "sha256": "3a4a402095652751542116c28eeae140cc49127c90dab6684ae950abf87a6c37",
+        "verification": "Complete epoch, data/protocol and source fingerprint reviewed"
       }
     ],
     "benchmark": {
@@ -1347,7 +1374,7 @@
     {
       "id": "pending",
       "title": "Training and submission readiness are separate",
-      "text": "Five sentiment runs and 1 of three caption runs are verified. Final submission files remain pending until all review gates are satisfied."
+      "text": "Five sentiment runs and 2 of three caption runs are verified. Final submission files remain pending until all review gates are satisfied."
     },
     {
       "id": "test_scope",
@@ -1360,7 +1387,7 @@
     "status": "pending",
     "verified_sentiment_runs": 5,
     "required_sentiment_runs": 5,
-    "verified_caption_runs": 1,
+    "verified_caption_runs": 2,
     "required_caption_runs": 3,
     "verified_captions": 0,
     "required_captions": 12,
