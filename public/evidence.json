@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at_utc": "2026-11-10T07:11:11Z",
+  "updated_at_utc": "2026-11-10T08:22:38Z",
   "project": {
     "id": "ece466-hw6",
     "title": "Global Project Assignment",
@@ -59,7 +59,7 @@
       "id": "Q2b",
       "title": "Alternative CNN encoder",
       "description": "Use pretrained GoogLeNet and compare training loss and perplexity.",
-      "status": "pending",
+      "status": "awaiting_baseline",
       "criterion": "A completed full epoch and measured comparison with the baseline.",
       "evidence_ids": [
         "alternate_encoder"
@@ -1073,10 +1073,31 @@
         "decoder": "lstm",
         "feature_size": 1024,
         "memory_format": "contiguous",
-        "status": "pending",
+        "status": "complete",
         "pretrained_weights": "ImageNet IMAGENET1K_V1",
-        "completion_detail": "Completed full-epoch result not yet available.",
-        "final_metrics": null
+        "completion_detail": "Verified complete epoch result.",
+        "final_metrics": {
+          "epoch": 1,
+          "loss": 2.7391235999950565,
+          "perplexity": 15.473418248386114,
+          "captions": 591753,
+          "batches": 2348,
+          "tokens": 7871788,
+          "seconds": 11630.7010906199
+        },
+        "epochs": 1,
+        "history": [
+          {
+            "epoch": 1,
+            "loss": 2.7391235999950565,
+            "perplexity": 15.473418248386114,
+            "captions": 591753,
+            "batches": 2348,
+            "tokens": 7871788,
+            "seconds": 11630.7010906199
+          }
+        ],
+        "training_results_sha256": "9e9ef3f940f05f5c50dc155a732613f95f1281e95f8d3afcc9bef37780cc50d7"
       },
       {
         "id": "simple_rnn",
@@ -1101,7 +1122,9 @@
       116033,
       273741,
       177118
-    ]
+    ],
+    "metric_comparisons": [],
+    "comparison_review": null
   },
   "verification": {
     "tests_passed": 23,
@@ -1259,6 +1282,12 @@
         "title": "Bidirectional LSTM, embedding 100 measured results",
         "sha256": "601ccd0b61f62bcd1de4220347f1aa3563b8965d180799f666f0ef35d46bd4f5",
         "verification": "Locally recomputed; all epoch records and result arithmetic reviewed"
+      },
+      {
+        "id": "alternate_encoder_caption_metrics",
+        "title": "GoogLeNet + LSTM complete training results",
+        "sha256": "9e9ef3f940f05f5c50dc155a732613f95f1281e95f8d3afcc9bef37780cc50d7",
+        "verification": "Complete epoch, data/protocol and source fingerprint reviewed"
       }
     ],
     "benchmark": {
@@ -1318,7 +1347,7 @@
     {
       "id": "pending",
       "title": "Training and submission readiness are separate",
-      "text": "Five sentiment runs are verified. Completed caption metrics, twelve saved captions and final image/document review remain required before submission files are released."
+      "text": "Five sentiment runs and 1 of three caption runs are verified. Final submission files remain pending until all review gates are satisfied."
     },
     {
       "id": "test_scope",
@@ -1331,7 +1360,7 @@
     "status": "pending",
     "verified_sentiment_runs": 5,
     "required_sentiment_runs": 5,
-    "verified_caption_runs": 0,
+    "verified_caption_runs": 1,
     "required_caption_runs": 3,
     "verified_captions": 0,
     "required_captions": 12,
@@ -1346,22 +1375,17 @@
   "final_outputs": [
     {
       "id": "word",
-      "label": "Final Word assignment",
+      "label": "Final Word report",
       "status": "pending"
     },
     {
       "id": "pdf",
-      "label": "Final PDF assignment",
+      "label": "Final PDF report",
       "status": "pending"
     },
     {
-      "id": "notebooks",
-      "label": "Executed reporting notebooks",
-      "status": "pending"
-    },
-    {
-      "id": "submission_package",
-      "label": "Reviewed submission package",
+      "id": "code",
+      "label": "Reproducible source code",
       "status": "pending"
     }
   ],
