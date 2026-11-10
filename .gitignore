@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars*
+.env*
+!.env.example
+__pycache__/
+*.pyc
+*.log
+local-status.json
+public/status.json
+qa/
+design-system.md
+evidence-review.md
+tools/public_snapshot.example.json
+lib/validate-snapshot.js
+

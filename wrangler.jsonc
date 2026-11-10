@@ -1,0 +1,6 @@
+{
+  "name": "aaraiz-assignment-work-ece-466",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-11-10",
+  "durable_objects": {"bindings": [{"name": "LIVE", "class_name": "LiveSnapshot", "script_name": "aaraiz-ece466-live-store"}]}
+}
