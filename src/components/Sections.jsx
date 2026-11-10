@@ -1,7 +1,5 @@
-import { useState } from 'react';
 import { ArrowUpRight, Check, Download, FileText, ShieldCheck } from 'lucide-react';
-import { AccuracyBars, HistoryChart } from './Charts.jsx';
-import { ActivityFeed, CaptionTable, ModelConfiguration } from './Overview.jsx';
+import { ActivityFeed, ModelConfiguration } from './Overview.jsx';
 import { EmptyState, SectionHeading, StateBadge, StatusIcon, TableWrap } from './Primitives.jsx';
 import { isComplete, label, lastSync, number, percent, safeUrl, utcTime } from '../lib/data.js';
 
@@ -22,40 +20,39 @@ export function Requirements({evidence}) {
   </section>;
 }
 
-export function Models({snapshot, onSelect}) {
-  const [tab, setTab] = useState('sentiment');
-  const [selected, setSelected] = useState('lstm_uni');
-  const sentiment = snapshot?.sentiment_runs || [];
-  const captions = snapshot?.caption_runs || [];
-  const chartRun = sentiment.find(run => run.id === selected) || sentiment[0];
-  return <section className="page-section">
-    <SectionHeading title="Models & results" note="Completed evaluations and the current state of every training run." />
-    <div className="section-tabs" role="group" aria-label="Experiment task">
-      <button aria-pressed={tab === 'sentiment'} onClick={() => setTab('sentiment')}>Sentiment analysis</button>
-      <button aria-pressed={tab === 'captioning'} onClick={() => setTab('captioning')}>Image captioning</button>
-    </div>
-    {tab === 'sentiment' ? <>
-      <div className="results-split"><section><h3>Held-out test accuracy</h3><AccuracyBars runs={sentiment} onSelect={onSelect} />
-        <p className="figure-note">5,000 held-out reviews · the same course split for all five configurations.</p></section>
-        <section><div className="chart-toolbar"><h3>Training loss</h3><label className="select-label">Model
-          <select value={chartRun?.id || ''} onChange={event => setSelected(event.target.value)} disabled={!sentiment.length}>
-            {sentiment.map(run => <option key={run.id} value={run.id}>{label(run)}</option>)}</select></label></div>
-          <HistoryChart history={chartRun?.history} title={`${label(chartRun)} training loss`} /></section></div>
-      <TableWrap label="Sentiment evaluation results"><table>
-        <thead><tr><th>Model</th><th>Epochs</th><th>Test examples</th><th className="align-right">Test accuracy</th><th>Status</th></tr></thead>
-        <tbody>{sentiment.map(run => <tr key={run.id}><th scope="row"><button className="model-link" onClick={() => onSelect(run)}>{label(run)}</button></th>
-          <td>{number(run.completed_epochs)} / {number(run.total_epochs)}</td><td>{number(run.test_examples)}</td>
-          <td className="align-right numeric">{isComplete(run) ? percent(run.test_accuracy) : 'Pending'}</td><td><StateBadge run={run} /></td></tr>)}</tbody>
-      </table></TableWrap>
-    </> : <>
-      <CaptionTable runs={captions} onSelect={onSelect} detailed />
-      <p className="figure-note">Online loss and perplexity are provisional until a full epoch and its checkpoint are saved.</p>
-      <section className="comparison-pending"><h3>Four-image caption comparison</h3>
-        {snapshot?.predictions?.length === 4 ? <p>Four recorded image comparisons are available in the published evidence.</p>
-          : <p>The same four test images will be evaluated with all three completed models. Twelve generated captions are required.</p>}
+export function Models({snapshot, evidence, onSelect, onNavigate}) {
+  const sentiment = evidence?.data_protocols?.sentiment || {};
+  const caption = evidence?.data_protocols?.captioning || {};
+  return <section className="page-section models-page">
+    <SectionHeading title="Models" note="Architecture, inputs and the shared training configuration." />
+    <ModelConfiguration snapshot={snapshot} evidence={evidence} onSelect={onSelect} />
+    <div className="model-protocol-grid">
+      <section className="surface"><h2>Sentiment models</h2>
+        <p className="model-flow">Tokens → Embedding → RNN / LSTM → Two-class logits</p>
+        <dl className="settings-list">
+          <div><dt>Hidden dimension</dt><dd>{number(sentiment.hidden_dim)}</dd></div>
+          <div><dt>Sequence length</dt><dd>{number(sentiment.sequence_length)}</dd></div>
+          <div><dt>Recurrent layers</dt><dd>{number(sentiment.num_layers)}</dd></div>
+          <div><dt>Recurrent dropout</dt><dd>{number(sentiment.dropout)}</dd></div>
+          <div><dt>Batch size</dt><dd>{number(sentiment.batch_size)}</dd></div>
+          <div><dt>Epochs</dt><dd>{number(sentiment.epochs)}</dd></div>
+          <div><dt>Optimizer</dt><dd>{sentiment.optimizer || '—'}</dd></div>
+          <div><dt>Learning rate</dt><dd>{sentiment.learning_rate ?? '—'}</dd></div>
+        </dl><p className="figure-note">Unidirectional and bidirectional RNN/LSTM; the bonus changes BiLSTM embedding size from 10 to 100.</p>
       </section>
-    </>}
-    <ModelConfiguration snapshot={snapshot} onSelect={onSelect} />
+      <section className="surface"><h2>Captioning models</h2>
+        <p className="model-flow">CNN features → Projection → LSTM / RNN → Token logits</p>
+        <dl className="settings-list">
+          <div><dt>Embedding dimension</dt><dd>{number(caption.embedding_size)}</dd></div>
+          <div><dt>Hidden dimension</dt><dd>{number(caption.hidden_size)}</dd></div>
+          <div><dt>Vocabulary</dt><dd>{number(caption.vocabulary_size)}</dd></div>
+          <div><dt>Batch size</dt><dd>{number(caption.batch_size)}</dd></div>
+          <div><dt>Complete epochs</dt><dd>{number(caption.planned_epochs)}</dd></div>
+          <div><dt>Learning rate</dt><dd>{caption.learning_rate ?? '—'}</dd></div>
+        </dl><p className="figure-note">Pretrained CNN parameters are frozen. BatchNorm/dropout stay in training mode; projection and decoder weights learn.</p>
+      </section>
+    </div>
+    <button className="primary-button" onClick={() => onNavigate('results')}>View measured results <ArrowUpRight size={18} aria-hidden="true" /></button>
   </section>;
 }
 

@@ -20,7 +20,7 @@ export function HistoryChart({history, metric = 'loss', title = 'Recorded traini
   const points = useMemo(() => (history || []).filter(row => Number.isFinite(row.epoch) && Number.isFinite(row[metric]))
     .map(row => ({x: row.epoch, y: row[metric]})), [history, metric]);
   if (!points.length) return <EmptyState>No recorded epoch history is available for this metric yet.</EmptyState>;
-  const width = 620, height = 240, left = 50, top = 18, right = 20, bottom = 42;
+  const width = 620, height = 240, left = 62, top = 18, right = 20, bottom = 42;
   const minX = Math.min(...points.map(p => p.x));
   const maxX = Math.max(...points.map(p => p.x));
   const low = Math.min(...points.map(p => p.y));
@@ -36,7 +36,7 @@ export function HistoryChart({history, metric = 'loss', title = 'Recorded traini
       <title id={`${id}-title`}>{title}</title>
       <desc id={`${id}-description`}>{points.length} recorded epochs. First: {display(points[0].y)};
         latest: {display(points[points.length - 1].y)}. The vertical axis spans {display(minY)} to {display(maxY)}.</desc>
-      {[0, 0.5, 1].map(fraction => {
+      {[0, 0.25, 0.5, 0.75, 1].map(fraction => {
         const value = minY + (maxY - minY) * fraction;
         return <g key={fraction}><line x1={left} x2={width - right} y1={y(value)} y2={y(value)} className="chart-grid" />
           <text x={left - 10} y={y(value) + 4} textAnchor="end">{display(value)}</text></g>;
@@ -44,7 +44,8 @@ export function HistoryChart({history, metric = 'loss', title = 'Recorded traini
       <path d={path} className="chart-line" />
       {points.map(point => <circle key={point.x} cx={x(point.x)} cy={y(point.y)} r="3" className="chart-dot">
         <title>Epoch {point.x}: {display(point.y)}</title></circle>)}
-      {[...new Set([minX, maxX])].map(value => <text key={value} x={x(value)} y={height - bottom + 23} textAnchor="middle">{value}</text>)}
+      {[...new Set([minX, ...[5, 10, 15, 20].filter(value => value > minX && value < maxX), maxX])].map(value =>
+        <text key={value} x={x(value)} y={height - bottom + 23} textAnchor="middle">{value}</text>)}
       <text x={width / 2} y={height - 3} textAnchor="middle">Epoch</text>
     </svg>
     <figcaption>{title} · observed epoch values only.</figcaption>

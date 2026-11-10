@@ -11,6 +11,8 @@ Live dashboard: https://aaraiz-assignment-work-ece-466.pages.dev
 - Three image-captioning experiments with real batch counters and interim token-weighted loss/perplexity; final metrics are shown only after a complete epoch.
 - Sanitized scheduler state, numerical batch events, and explicit pending/failure/stale states.
 
+The seven sections are Overview, Requirements, Models, Results, Validation, Activity, and Files. Results keeps measured outcomes separate from model settings, including the five sentiment runs, their twenty-epoch histories, and matched comparisons. Caption metrics become final only when the saved full-epoch record passes validation. The four-image comparison appears only when all twelve actual outputs and the image-specific review are bound to the published evidence hashes.
+
 The 5,000-review sentiment test set is the course's stratified split from the pooled 50,000 labelled IMDB reviews. It is not the official IMDB benchmark test split. Interim losses are not final checkpoint evaluation metrics. Software tests do not establish model accuracy or guarantee that an assignment has no errors.
 
 ## Live data
@@ -26,7 +28,7 @@ Use Node 22.12+ and Python 3.10+.
 ```sh
 npm ci
 npm run build
-node --test tests/*.test.mjs
+npm test
 python -m unittest discover -s tests -p 'test_*.py'
 npm run dev
 ```
@@ -45,5 +47,7 @@ npx wrangler pages deploy dist --project-name aaraiz-assignment-work-ece-466 --b
 ```
 
 The store Worker has no public route. Only the Pages binding reaches it. Publication requires a long bearer token, bounded JSON and a strict schema. Older snapshots cannot overwrite newer data. No paid plan upgrade is required by this implementation.
+
+The public feed is updated by a running authorized publisher; deploying the frontend alone does not connect to the university server. When that publisher or its monitor stops, the page retains the last snapshot and labels it stale. Source age is carried forward using server receipt time and monotonic browser elapsed time so workstation clock differences cannot keep old data appearing live.
 
 Provider references: [Pages bindings](https://developers.cloudflare.com/pages/functions/bindings/), [SQLite-backed Durable Objects](https://developers.cloudflare.com/durable-objects/best-practices/access-durable-objects-storage/), and [Durable Objects free-plan limits](https://developers.cloudflare.com/durable-objects/platform/pricing/).

@@ -47,7 +47,8 @@
           "RESULT_MALFORMED",
           "INVALID_DATA_DROPPED",
           "EVIDENCE_UNAVAILABLE",
-          "UNMAPPED_JOB"
+          "UNMAPPED_JOB",
+          "PREDICTIONS_NOT_VERIFIED"
         ]
       }
     },
@@ -673,9 +674,285 @@
       }
     },
     "predictions": {
-      "type": "array",
-      "maxItems": 0,
-      "items": false
+      "oneOf": [
+        {
+          "type": "array",
+          "maxItems": 0,
+          "items": false
+        },
+        {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "image_id": {
+                  "type": "integer",
+                  "const": 49919
+                },
+                "image_url": {
+                  "type": "string",
+                  "const": "/comparison-images/000000049919.90236c88f32cdce0736351b53420dea23e8cf994ce2ed985e18f7416f606335c.jpg"
+                },
+                "image_sha256": {
+                  "type": "string",
+                  "const": "90236c88f32cdce0736351b53420dea23e8cf994ce2ed985e18f7416f606335c"
+                },
+                "predictions_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "observations_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "captions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "baseline": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 8192
+                    },
+                    "alternate_encoder": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 8192
+                    },
+                    "simple_rnn": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 8192
+                    }
+                  },
+                  "required": [
+                    "baseline",
+                    "alternate_encoder",
+                    "simple_rnn"
+                  ]
+                },
+                "observation": {
+                  "type": "string",
+                  "minLength": 20,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "image_id",
+                "image_url",
+                "image_sha256",
+                "predictions_sha256",
+                "observations_sha256",
+                "captions",
+                "observation"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "image_id": {
+                  "type": "integer",
+                  "const": 116033
+                },
+                "image_url": {
+                  "type": "string",
+                  "const": "/comparison-images/000000116033.32fba6d3d9654d32cdc6fd6cee1a8374ba0e8728973317a40fd9f800e2c0c195.jpg"
+                },
+                "image_sha256": {
+                  "type": "string",
+                  "const": "32fba6d3d9654d32cdc6fd6cee1a8374ba0e8728973317a40fd9f800e2c0c195"
+                },
+                "predictions_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "observations_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "captions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "baseline": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 8192
+                    },
+                    "alternate_encoder": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 8192
+                    },
+                    "simple_rnn": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 8192
+                    }
+                  },
+                  "required": [
+                    "baseline",
+                    "alternate_encoder",
+                    "simple_rnn"
+                  ]
+                },
+                "observation": {
+                  "type": "string",
+                  "minLength": 20,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "image_id",
+                "image_url",
+                "image_sha256",
+                "predictions_sha256",
+                "observations_sha256",
+                "captions",
+                "observation"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "image_id": {
+                  "type": "integer",
+                  "const": 273741
+                },
+                "image_url": {
+                  "type": "string",
+                  "const": "/comparison-images/000000273741.e55f3e01911c98180a7bf9907324de5f4f6c9cfcc80cc3ccc6dc38a7b44fb7e7.jpg"
+                },
+                "image_sha256": {
+                  "type": "string",
+                  "const": "e55f3e01911c98180a7bf9907324de5f4f6c9cfcc80cc3ccc6dc38a7b44fb7e7"
+                },
+                "predictions_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "observations_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "captions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "baseline": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 8192
+                    },
+                    "alternate_encoder": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 8192
+                    },
+                    "simple_rnn": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 8192
+                    }
+                  },
+                  "required": [
+                    "baseline",
+                    "alternate_encoder",
+                    "simple_rnn"
+                  ]
+                },
+                "observation": {
+                  "type": "string",
+                  "minLength": 20,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "image_id",
+                "image_url",
+                "image_sha256",
+                "predictions_sha256",
+                "observations_sha256",
+                "captions",
+                "observation"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "image_id": {
+                  "type": "integer",
+                  "const": 177118
+                },
+                "image_url": {
+                  "type": "string",
+                  "const": "/comparison-images/000000177118.ea02d764ad5f8c9c01e0f90c14b53fd9399ea25b30e1e16e8ea50aa1e02b4c4e.jpg"
+                },
+                "image_sha256": {
+                  "type": "string",
+                  "const": "ea02d764ad5f8c9c01e0f90c14b53fd9399ea25b30e1e16e8ea50aa1e02b4c4e"
+                },
+                "predictions_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "observations_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "captions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "baseline": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 8192
+                    },
+                    "alternate_encoder": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 8192
+                    },
+                    "simple_rnn": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 8192
+                    }
+                  },
+                  "required": [
+                    "baseline",
+                    "alternate_encoder",
+                    "simple_rnn"
+                  ]
+                },
+                "observation": {
+                  "type": "string",
+                  "minLength": 20,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "image_id",
+                "image_url",
+                "image_sha256",
+                "predictions_sha256",
+                "observations_sha256",
+                "captions",
+                "observation"
+              ]
+            }
+          ],
+          "additionalItems": false
+        }
+      ]
     },
     "evidence": {
       "type": "object",

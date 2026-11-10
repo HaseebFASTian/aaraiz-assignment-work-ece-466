@@ -1,11 +1,13 @@
 import {authorized, json, readBoundedJson} from '../../lib/http.js';
 import {validateSnapshot} from '../../lib/validate-snapshot.js';
+import {consistentComparison} from '../../lib/comparison.js';
 async function onRequestPost({request, env}) {
   if (!await authorized(request, env.PUBLISH_TOKEN)) return json({error: 'Unauthorized'}, 401);
   let snapshot;
   try { snapshot = await readBoundedJson(request); }
   catch { return json({error: 'Expected bounded JSON snapshot'}, 400); }
   if (!validateSnapshot(snapshot)) return json({error: 'Invalid public snapshot'}, 422);
+  if (!consistentComparison(snapshot)) return json({error: 'Inconsistent reviewed comparison'}, 422);
   if (snapshot.snapshot_utc === null || !Number.isFinite(Date.parse(snapshot.snapshot_utc))) return json({error: 'Source timestamp required'}, 422);
   if (Date.parse(snapshot.snapshot_utc) > Date.now() + 120000) return json({error: 'Snapshot timestamp is in the future'}, 422);
   try {

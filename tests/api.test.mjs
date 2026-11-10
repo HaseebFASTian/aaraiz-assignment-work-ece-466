@@ -5,6 +5,24 @@ import {LiveSnapshot} from '../cloudflare/store.js';
 import {withCurrentFreshness} from '../lib/freshness.js';
 import {onRequest as publishEndpoint} from '../functions/api/publish.js';
 import {onRequest as statusEndpoint} from '../functions/api/status.js';
+import {consistentComparison} from '../lib/comparison.js';
+
+test('caption publication binds all four rows to one reviewed, completed experiment', () => {
+  const snapshot = {predictions:Array.from({length:4}, () => ({predictions_sha256:'a'.repeat(64), observations_sha256:'b'.repeat(64)})),
+    counts:{caption_completed:3}, caption_runs:['baseline','alternate_encoder','simple_rnn'].map(id => ({id,completed:true}))};
+  assert.equal(consistentComparison(snapshot),true);
+  const mixed = structuredClone(snapshot);
+  mixed.predictions[3].observations_sha256 = 'c'.repeat(64);
+  assert.equal(consistentComparison(mixed),false);
+  mixed.predictions[3].observations_sha256 = snapshot.predictions[0].observations_sha256;
+  mixed.predictions[3].predictions_sha256 = 'd'.repeat(64);
+  assert.equal(consistentComparison(mixed),false);
+  const unfinished = structuredClone(snapshot);
+  unfinished.caption_runs[2].completed = false;
+  assert.equal(consistentComparison(unfinished),false);
+  unfinished.predictions = [];
+  assert.equal(consistentComparison(unfinished),true);
+});
 
 test('publisher authentication rejects missing, short and incorrect secrets', async () => {
   const expected = 'test-only-token-'.repeat(4);

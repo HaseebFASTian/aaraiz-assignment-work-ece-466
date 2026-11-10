@@ -25,6 +25,18 @@ CAPTIONS = {
     "alternate_encoder": ("GoogLeNet + LSTM", "googlenet", "lstm"),
     "simple_rnn": ("ResNet-50 + RNN", "resnet50", "rnn"),
 }
+# Fixed seed-466 COCO test selection, verified against the preparation manifest.
+COMPARISON_IMAGES = {
+    49919: "90236c88f32cdce0736351b53420dea23e8cf994ce2ed985e18f7416f606335c",
+    116033: "32fba6d3d9654d32cdc6fd6cee1a8374ba0e8728973317a40fd9f800e2c0c195",
+    273741: "e55f3e01911c98180a7bf9907324de5f4f6c9cfcc80cc3ccc6dc38a7b44fb7e7",
+    177118: "ea02d764ad5f8c9c01e0f90c14b53fd9399ea25b30e1e16e8ea50aa1e02b4c4e",
+}
+CAPTION_VOCABULARY_SHA256 = "ff3d26ea0127947715337a77f7f5a599ddc7e8f8f8b3fe6a0f1daff9cf25cf25"
+CAPTION_ANNOTATIONS_SHA256 = "4b62086319480e0739ef390d04084515defb9c213ff13605a036061e33314317"
+CAPTION_PROTOCOL = {"embed_size": 512, "hidden_size": 512, "batch_size": 256,
+                    "vocab_threshold": 6, "learning_rate": 0.001, "seed": 466,
+                    "max_length": 30, "freeze_backbone_stats": False}
 JOB_LABELS = {"caption_baseline": "Baseline caption model", "caption_alt": "GoogLeNet caption model",
               "caption_rnn": "RNN caption model", "comparison": "Caption comparison"}
 JOB_VARIANTS = {"caption_baseline": "baseline", "caption_alt": "alternate_encoder", "caption_rnn": "simple_rnn"}
@@ -34,7 +46,8 @@ WARNING_CODES = {"SNAPSHOT_UNAVAILABLE", "SNAPSHOT_MALFORMED", "SNAPSHOT_TIME_IN
                  "SNAPSHOT_IN_FUTURE", "MONITOR_DISCONNECTED", "MONITOR_STATUS_UNKNOWN",
                  "SNAPSHOT_STALE", "SCHEDULER_UNAVAILABLE", "ACCOUNTING_UNAVAILABLE",
                  "MONITOR_WARNING", "ACTIVE_JOB_FAILED", "RESULT_MALFORMED",
-                 "INVALID_DATA_DROPPED", "EVIDENCE_UNAVAILABLE", "UNMAPPED_JOB"}
+                 "INVALID_DATA_DROPPED", "EVIDENCE_UNAVAILABLE", "UNMAPPED_JOB",
+                 "PREDICTIONS_NOT_VERIFIED"}
 
 
 def mapping(value):
@@ -193,6 +206,125 @@ def batch_events(source, monitored):
     return list(unique.values())[-72:]
 
 
+def exact_fields(record, expected):
+    """Boolean flags must not pass as integer counts, or vice versa."""
+    return all(type(record.get(key)) is type(value) and record[key] == value
+               for key, value in expected.items())
+
+
+def reviewed_predictions(workspace, warnings, caption_runs, training_records, evidence):
+    """Publish four reviewed comparisons together, or none; never repair model text."""
+    prediction_path = workspace / "results/comparison/predictions.json"
+    observation_path = workspace / "work/final_observations.json"
+    if not prediction_path.is_file() or not observation_path.is_file():
+        return []
+
+    def require(condition):
+        if not condition:
+            raise ValueError("PREDICTIONS_NOT_VERIFIED")
+
+    def read_bound(path, limit):
+        with path.open("rb") as stream:
+            content = stream.read(limit + 1)
+        require(len(content) <= limit)
+        return content
+
+    def parse_record(content):
+        def unique_object(pairs):
+            result = {}
+            for key, value in pairs:
+                require(key not in result)
+                result[key] = value
+            return result
+        result = json.loads(content, object_pairs_hook=unique_object)
+        require(isinstance(result, dict))
+        return result
+
+    def text_ok(value, maximum, minimum=0):
+        return (isinstance(value, str) and minimum <= len(value) <= maximum
+                and not re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\ud800-\udfff]", value))
+
+    try:
+        require(len(caption_runs) == 3 and all(row.get("completed") is True for row in caption_runs))
+        prediction_bytes = read_bound(prediction_path, 256 * 1024)
+        observation_bytes = read_bound(observation_path, 32 * 1024)
+        prediction_hash = hashlib.sha256(prediction_bytes).hexdigest()
+        observation_hash = hashlib.sha256(observation_bytes).hexdigest()
+        comparison = parse_record(prediction_bytes)
+        observations = parse_record(observation_bytes)
+        require(exact_fields(comparison, {"seed": 466}))
+        require(exact_fields(observations, {"visual_reviewed": True, "source_split": "COCO test2017",
+                                           "predictions_sha256": prediction_hash}))
+        marker = mapping(mapping(evidence.get("captioning")).get("comparison_review"))
+        require(exact_fields(marker, {"status": "reviewed", "predictions_sha256": prediction_hash,
+                                      "observations_sha256": observation_hash}))
+
+        raw_labels = {f"{backbone}_{cell}": run_id for run_id, (_, backbone, cell) in CAPTIONS.items()}
+        protocols = comparison.get("comparison_protocol")
+        require(isinstance(protocols, list) and len(protocols) == 3
+                and all(isinstance(row, dict) and isinstance(row.get("model"), str) for row in protocols))
+        require({row["model"] for row in protocols} == set(raw_labels))
+        protocol_by_label = {row["model"]: row for row in protocols}
+        shared_record = None
+        for label, run_id in raw_labels.items():
+            training = mapping(training_records.get(run_id))
+            config = mapping(training.get("config"))
+            require(exact_fields(config, CAPTION_PROTOCOL))
+            require(exact_fields(training, {"course_copy_verified": True, "training_images": 118287,
+                    "training_captions": 591753, "vocabulary_size": 9438, "vocabulary_source": "provided_json",
+                    "vocabulary_source_sha256": CAPTION_VOCABULARY_SHA256,
+                    "annotations_sha256": CAPTION_ANNOTATIONS_SHA256,
+                    "metric_kind": "token-weighted online training loss during the epoch"}))
+            epochs = integer(training.get("completed_epochs"), 20)
+            require(epochs and exact_fields(config, {"epochs": epochs}))
+            epoch_rows = training.get("epochs")
+            require(isinstance(epoch_rows, list) and len(epoch_rows) == epochs)
+            # The projector has already checked each full epoch; retain matched
+            # token/batch coverage across models as an additional protocol check.
+            coverage = [(row.get("token_count"), row.get("batch_count")) for row in epoch_rows]
+            shared = (epochs, coverage)
+            require(shared_record is None or shared_record == shared)
+            shared_record = shared
+            channels_last = config.get("channels_last", False)
+            require(type(channels_last) is bool)
+            expected = dict(CAPTION_PROTOCOL, epoch=epochs, training_captions=591753,
+                            annotations_sha256=CAPTION_ANNOTATIONS_SHA256, channels_last=channels_last,
+                            cnn_memory_format="channels_last" if channels_last else "contiguous", precision="float32")
+            require(exact_fields(protocol_by_label[label], expected))
+
+        rows, notes = comparison.get("predictions"), observations.get("images")
+        for records in (rows, notes):
+            require(isinstance(records, list) and len(records) == 4
+                    and all(isinstance(row, dict) and type(row.get("image_id")) is int for row in records))
+            require({row["image_id"] for row in records} == set(COMPARISON_IMAGES))
+        by_id = {row["image_id"]: row for row in rows}
+        notes_by_id = {row["image_id"]: row for row in notes}
+        result = []
+        for image_id, image_hash in COMPARISON_IMAGES.items():
+            row, note = by_id[image_id], notes_by_id[image_id]
+            filename = f"{image_id:012d}.jpg"
+            asset_name = f"{image_id:012d}.{image_hash}.jpg"
+            require(row.get("file_name") == filename and note.get("file_name") == filename
+                    and note.get("image_sha256") == image_hash)
+            captions = mapping(row.get("captions"))
+            require(set(captions) == set(raw_labels) and all(text_ok(value, 8192) for value in captions.values()))
+            observation = note.get("observation")
+            require(text_ok(observation, 2000, 20) and len(observation.strip()) >= 20
+                    and not re.search(r"\b(TODO|TBD|placeholder|lorem ipsum)\b", observation, re.I))
+            for path in (workspace / "results/comparison/images" / filename,
+                         workspace / "dashboard/public/comparison-images" / asset_name):
+                require(hashlib.sha256(read_bound(path, 8 * 1024 * 1024)).hexdigest() == image_hash)
+            result.append({"image_id": image_id, "image_url": f"/comparison-images/{asset_name}",
+                "image_sha256": image_hash, "predictions_sha256": prediction_hash,
+                "observations_sha256": observation_hash,
+                "captions": {run_id: captions[label] for label, run_id in raw_labels.items()},
+                "observation": observation})
+        return result
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, RecursionError):
+        warnings.add("PREDICTIONS_NOT_VERIFIED")
+        return []
+
+
 def project_snapshot(workspace, now=None, stale_after=120):
     if type(stale_after) is not int or not 30 <= stale_after <= 3600:
         raise ValueError("INVALID_STALENESS_LIMIT")
@@ -291,6 +423,7 @@ def project_snapshot(workspace, now=None, stale_after=120):
     caption_source = {row.get("variant"): row for row in objects(source.get("caption_runs"), 10)
                       if isinstance(row.get("variant"), str)}
     caption_runs = []
+    caption_training_records = {}
     for run_id, (label, backbone, cell) in CAPTIONS.items():
         row = caption_source.get(run_id, {})
         optimized = row.get("result_source") == f"results/captioning_optimized/{run_id}"
@@ -300,6 +433,7 @@ def project_snapshot(workspace, now=None, stale_after=120):
         if metrics and (config.get("backbone") != backbone or config.get("cell") != cell):
             warnings.add("INVALID_DATA_DROPPED")
             metrics, config = {}, {}
+        caption_training_records[run_id] = metrics
         saved_history = history(metrics.get("epochs"), caption=True)
         reported_epochs = integer(metrics.get("completed_epochs"), 20)
         raw_epochs = objects(metrics.get("epochs"), 100)
@@ -358,6 +492,7 @@ def project_snapshot(workspace, now=None, stale_after=120):
     tests = mapping(mapping(evidence.get("verification")).get("tests"))
     total, passed = integer(tests.get("unique_count")), integer(tests.get("passed_count"))
     tests_status = "passed" if total and total == passed and tests.get("status") == "passed" else "pending" if total else "unavailable"
+    predictions = reviewed_predictions(workspace, warnings, caption_runs, caption_training_records, evidence)
     return {"schema_version": 1, "snapshot_utc": source_time,
         "projected_utc": now.isoformat(timespec="seconds").replace("+00:00", "Z"),
         "connected": source.get("monitor_connected") is True and not stale,
@@ -367,7 +502,7 @@ def project_snapshot(workspace, now=None, stale_after=120):
         "counts": {"sentiment_completed": sum(row["completed"] for row in sentiment_runs),
                    "caption_completed": sum(row["completed"] for row in caption_runs)},
         "sentiment_runs": sentiment_runs, "caption_runs": caption_runs, "jobs": jobs,
-        "batch_events": batch_events(source, monitored), "predictions": [],
+        "batch_events": batch_events(source, monitored), "predictions": predictions,
         "evidence": {"sha256": evidence_hash, "updated_at_utc": timestamp(evidence.get("updated_at_utc")),
                      "tests": {"unique_count": total, "passed_count": passed, "status": tests_status}}}
 

@@ -26,6 +26,12 @@ export default function ModelDialog({run, onClose}) {
   ];
   if (caption) settings.push(['CNN/image layout', config.channels_last === true ? 'Channels last' : config.channels_last === false ? 'Contiguous' : 'Not yet recorded'],
     ['CNN gradients', 'Frozen'], ['CNN statistics during training', 'Training mode']);
+  if (!caption && isComplete(run)) {
+    if (Number.isFinite(run.test_correct)) settings.push(['Correct test reviews', number(run.test_correct)],
+      ['Incorrect test reviews', number(run.test_examples - run.test_correct)]);
+    if (Number.isFinite(run.test_cross_entropy)) settings.push(['Test cross-entropy', number(run.test_cross_entropy, 6)]);
+    if (Number.isFinite(run.parameters)) settings.push(['Model parameters', number(run.parameters)]);
+  }
   return <dialog ref={dialog} className="model-dialog"
     onClose={event => {if (!event.currentTarget.open) onClose();}}
     onClick={event => {if (event.target === event.currentTarget) dialog.current.close();}}

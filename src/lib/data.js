@@ -1,6 +1,6 @@
 export const NAVIGATION = [
-  ['overview', 'Overview'], ['requirements', 'Requirements'], ['models', 'Models & results'],
-  ['validation', 'Validation'], ['activity', 'Server activity'], ['deliverables', 'Deliverables'],
+  ['overview', 'Overview'], ['requirements', 'Requirements'], ['models', 'Models'], ['results', 'Results'],
+  ['validation', 'Validation'], ['activity', 'Activity'], ['files', 'Files'],
 ];
 
 export const MODEL_NAMES = {
@@ -77,11 +77,7 @@ export function checklist(snapshot, evidence) {
   const captionFailed = snapshot?.failure === true || captions.some(run => stateInfo(run).tone === 'failed');
   const captionRunning = captions.some(run => stateInfo(run).tone === 'running');
   const captionState = captionDone ? 'complete' : captionFailed ? 'failed' : captionRunning ? 'running' : 'pending';
-  const predictionComplete = predictions.length === 4 && new Set(predictions.map(row => row.image_id)).size === 4
-    && predictions.every(row => Number.isInteger(row.image_id)
-      && ['resnet50_lstm', 'googlenet_lstm', 'resnet50_rnn'].every(name => typeof row.captions?.[name] === 'string'));
-  const predictionReviewed = predictionComplete && evidence?.readiness?.verified_captions === 12
-    && evidence?.readiness?.final_visual_review_complete === true;
+  const predictionReviewed = reviewedCaptionRows(snapshot, evidence).length === 4;
   const outputs = evidence?.final_outputs || [];
   const finalDone = evidence?.readiness?.ready === true && Array.isArray(outputs) && outputs.length > 0
     && outputs.every(row => row.status === 'ready');
@@ -89,6 +85,43 @@ export function checklist(snapshot, evidence) {
     {title: 'Q1 · Sentiment results', status: sentimentDone ? 'complete' : 'pending', note: sentimentDone ? 'complete' : sentiment.length ? 'in progress' : 'awaiting data'},
     {title: 'Q2a–c · Caption models', status: captionState, note: captionDone ? 'complete' : captionFailed ? 'needs attention' : captionRunning ? 'running' : 'awaiting results'},
     {title: 'Q2d · Four-image comparison', status: predictionReviewed ? 'complete' : 'pending', note: predictionReviewed ? 'complete' : predictions.length ? 'pending review' : 'queued'},
-    {title: 'Report & notebooks', status: finalDone ? 'complete' : 'pending', note: finalDone ? 'ready' : 'pending review'},
+    {title: 'Reports & code', status: finalDone ? 'complete' : 'pending', note: finalDone ? 'ready' : 'pending review'},
   ];
+}
+
+export function catalogSentimentRuns(evidence) {
+  const protocol = evidence?.data_protocols?.sentiment || {};
+  return (evidence?.sentiment?.runs || []).map(run => ({
+    id: run.id, label: run.label, state: run.status,
+    completed: run.status === 'complete' && run.epochs === 20 && run.examples === 5000,
+    completed_epochs: run.epochs, total_epochs: protocol.epochs || 20,
+    test_accuracy: Number.isFinite(run.accuracy_percent) ? run.accuracy_percent / 100 : null,
+    test_examples: run.examples, test_correct: run.correct, test_cross_entropy: run.test_cross_entropy,
+    parameters: run.parameters, embedding_dim: run.embedding_dim,
+    config: {embedding_dim: run.embedding_dim, hidden_size: protocol.hidden_dim,
+      num_layers: protocol.num_layers, dropout: protocol.dropout, batch_size: protocol.batch_size,
+      precision: protocol.precision, bidirectional: run.bidirectional},
+    history: (run.history || []).map(row => ({epoch: row.epoch, loss: row.loss,
+      accuracy: Number.isFinite(row.accuracy_percent) ? row.accuracy_percent / 100 : null})),
+  }));
+}
+
+export function reviewedCaptionRows(snapshot, evidence) {
+  const rows = snapshot?.predictions || [];
+  const review = evidence?.captioning?.comparison_review;
+  const requiredModels = ['baseline', 'alternate_encoder', 'simple_rnn'];
+  const expectedIds = [49919, 116033, 273741, 177118];
+  const completedModels = snapshot?.caption_runs || [];
+  if (!review || review.status !== 'reviewed' || evidence?.captioning?.generated_captions_verified !== 12
+    || rows.length !== 4 || new Set(rows.map(row => row.image_id)).size !== 4
+    || !requiredModels.every(id => completedModels.some(run => run.id === id && isComplete(run)))) return [];
+  const sha = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+  if (!sha(review.predictions_sha256) || !sha(review.observations_sha256)) return [];
+  const valid = rows.every(row => expectedIds.includes(row.image_id) && sha(row.image_sha256)
+    && row.predictions_sha256 === review.predictions_sha256
+    && row.observations_sha256 === review.observations_sha256
+    && row.image_url === `/comparison-images/${String(row.image_id).padStart(12, '0')}.${row.image_sha256}.jpg`
+    && typeof row.observation === 'string'
+    && requiredModels.every(id => typeof row.captions?.[id] === 'string'));
+  return valid ? expectedIds.map(id => rows.find(row => row.image_id === id)) : [];
 }

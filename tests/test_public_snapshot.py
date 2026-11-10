@@ -1,10 +1,12 @@
 """Public projection/privacy checks; no network publication or real credentials."""
 
 from datetime import datetime, timedelta, timezone
+import hashlib
 import io
 import json
 import math
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 import unittest
@@ -12,7 +14,8 @@ import urllib.error
 import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from public_snapshot import project_snapshot
+from public_snapshot import (CAPTION_ANNOTATIONS_SHA256, CAPTION_PROTOCOL, CAPTION_VOCABULARY_SHA256,
+                             CAPTIONS, COMPARISON_IMAGES, project_snapshot)
 from publish_snapshot import PUBLISH_URL, RejectRedirects, publish, read_token, validate_url
 
 
@@ -63,6 +66,56 @@ class PublicSnapshotTests(unittest.TestCase):
 
     def tearDown(self):
         self.temporary.cleanup()
+
+    def save_review(self, comparison, observations):
+        write(self.root, "results/comparison/predictions.json", comparison)
+        prediction_hash = hashlib.sha256((self.root / "results/comparison/predictions.json").read_bytes()).hexdigest()
+        observations["predictions_sha256"] = prediction_hash
+        write(self.root, "work/final_observations.json", observations)
+        observation_hash = hashlib.sha256((self.root / "work/final_observations.json").read_bytes()).hexdigest()
+        evidence_path = self.root / "dashboard/public/evidence.json"
+        evidence = json.loads(evidence_path.read_text())
+        evidence["captioning"] = {"comparison_review": {"status": "reviewed", "predictions_sha256": prediction_hash,
+                                                       "observations_sha256": observation_hash}}
+        write(self.root, "dashboard/public/evidence.json", evidence)
+
+    def comparison_fixture(self):
+        """Synthetic records stay in a temporary directory; JPEG identity is real."""
+        raw = source()
+        raw["caption_runs"] = []
+        comparison = {"seed": 466, "checkpoints": [PRIVATE], "comparison_protocol": [], "predictions": []}
+        for run_id, (_, backbone, cell) in CAPTIONS.items():
+            config = dict(CAPTION_PROTOCOL, backbone=backbone, cell=cell, epochs=1, channels_last=False)
+            metric = {"config": config, "completed_epochs": 1, "course_copy_verified": True,
+                      "training_images": 118287, "training_captions": 591753, "vocabulary_size": 9438,
+                      "vocabulary_source": "provided_json", "vocabulary_source_sha256": CAPTION_VOCABULARY_SHA256,
+                      "annotations_sha256": CAPTION_ANNOTATIONS_SHA256,
+                      "metric_kind": "token-weighted online training loss during the epoch", "private_path": PRIVATE,
+                      "epochs": [{"epoch": 1, "caption_count": 591753, "token_count": 1500000,
+                                  "batch_count": 2348, "train_loss": 3., "perplexity": math.exp(3), "seconds": 100}]}
+            relative = f"results/captioning/{run_id}"
+            write(self.root, relative + "/training_results.json", metric)
+            raw["caption_runs"].append({"variant": run_id, "state": "complete", "result_source": relative})
+            comparison["comparison_protocol"].append(dict(CAPTION_PROTOCOL, model=f"{backbone}_{cell}", epoch=1,
+                training_captions=591753, annotations_sha256=CAPTION_ANNOTATIONS_SHA256,
+                channels_last=False, cnn_memory_format="contiguous", precision="float32", private_host=PRIVATE))
+        write(self.root, "work/live_progress/status.json", raw)
+        observations = {"visual_reviewed": True, "source_split": "COCO test2017", "images": [], "private_note": PRIVATE}
+        for image_id, digest in COMPARISON_IMAGES.items():
+            filename = f"{image_id:012d}.jpg"
+            asset = f"{image_id:012d}.{digest}.jpg"
+            original = Path(__file__).resolve().parents[1] / "public/comparison-images" / asset
+            for destination in (self.root / "results/comparison/images" / filename,
+                                self.root / "dashboard/public/comparison-images" / asset):
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(original, destination)
+            comparison["predictions"].append({"image_id": image_id, "file_name": filename, "image_path": PRIVATE,
+                "captions": {"resnet50_lstm": "", "googlenet_lstm": 'Exact <text> & "quotes".',
+                             "resnet50_rnn": "  Preserve spaces and punctuation!  "}})
+            observations["images"].append({"image_id": image_id, "file_name": filename, "image_sha256": digest,
+                "observation": "Synthetic review fixture used only inside this temporary test."})
+        self.save_review(comparison, observations)
+        return comparison, observations
 
     def test_allowlist_removes_private_fields_and_distinguishes_batch_metrics(self):
         result = project_snapshot(self.root, NOW)
@@ -194,6 +247,86 @@ class PublicSnapshotTests(unittest.TestCase):
         self.assertFalse(row["completed"])
         self.assertEqual(row["completed_epochs"], 0)
         self.assertEqual(row["history"], [])
+
+    def test_reviewed_comparison_preserves_exact_captions_and_allowlists_metadata(self):
+        comparison, _ = self.comparison_fixture()
+        result = project_snapshot(self.root, NOW)
+        rows = result["predictions"]
+        self.assertEqual([row["image_id"] for row in rows], list(COMPARISON_IMAGES))
+        self.assertEqual(result["counts"]["caption_completed"], 3)
+        self.assertNotIn(PRIVATE, json.dumps(result))
+        for source_row, row in zip(comparison["predictions"], rows):
+            self.assertEqual(row["captions"]["baseline"], "")
+            self.assertEqual(row["captions"]["alternate_encoder"], source_row["captions"]["googlenet_lstm"])
+            self.assertEqual(row["captions"]["simple_rnn"], source_row["captions"]["resnet50_rnn"])
+            self.assertEqual(row["image_sha256"], COMPARISON_IMAGES[row["image_id"]])
+            self.assertTrue(row["image_url"].startswith("/comparison-images/"))
+            self.assertNotIn("image_path", row)
+        self.assertEqual(len({row["predictions_sha256"] for row in rows}), 1)
+        self.assertEqual(len({row["observations_sha256"] for row in rows}), 1)
+
+    def test_comparison_rejects_unreviewed_incomplete_or_mismatched_records(self):
+        changes = {
+            "duplicate image": lambda c, o: c["predictions"][0].update(image_id=116033),
+            "invalid image type": lambda c, o: c["predictions"][0].update(image_id=[]),
+            "wrong filename": lambda c, o: c["predictions"][0].update(file_name="../../private.jpg"),
+            "missing caption": lambda c, o: c["predictions"][0]["captions"].pop("resnet50_lstm"),
+            "extra caption": lambda c, o: c["predictions"][0]["captions"].update(unknown=PRIVATE),
+            "null caption": lambda c, o: c["predictions"][0]["captions"].update(resnet50_lstm=None),
+            "unencodable caption": lambda c, o: c["predictions"][0]["captions"].update(resnet50_lstm="\ud800"),
+            "unreviewed": lambda c, o: o.update(visual_reviewed=False),
+            "wrong split": lambda c, o: o.update(source_split="COCO train2017"),
+            "wrong reviewed image": lambda c, o: o["images"][0].update(image_sha256="0" * 64),
+            "unfinished observation": lambda c, o: o["images"][0].update(observation="TODO: finish this review after the model trains."),
+            "protocol precision": lambda c, o: c["comparison_protocol"][0].update(precision="float16"),
+            "protocol setting": lambda c, o: c["comparison_protocol"][0].update(batch_size=128),
+            "duplicate model": lambda c, o: c["comparison_protocol"][0].update(model="googlenet_lstm"),
+        }
+        for name, change in changes.items():
+            with self.subTest(name=name):
+                comparison, observations = self.comparison_fixture()
+                change(comparison, observations)
+                self.save_review(comparison, observations)
+                result = project_snapshot(self.root, NOW)
+                self.assertEqual(result["predictions"], [])
+                self.assertIn("PREDICTIONS_NOT_VERIFIED", result["warnings"])
+                self.assertNotIn(PRIVATE, json.dumps(result))
+
+    def test_comparison_binds_file_bytes_assets_training_and_catalog(self):
+        def append_prediction():
+            with (self.root / "results/comparison/predictions.json").open("a") as stream:
+                stream.write("\n")
+        def change_image():
+            (self.root / "results/comparison/images/000000049919.jpg").write_bytes(b"wrong image")
+        def remove_asset():
+            next((self.root / "dashboard/public/comparison-images").glob("000000049919.*.jpg")).unlink()
+        def change_training():
+            path = "results/captioning/baseline/training_results.json"
+            metric = json.loads((self.root / path).read_text())
+            metric["config"]["learning_rate"] = .0002
+            write(self.root, path, metric)
+        def incomplete_training():
+            path = "results/captioning/baseline/training_results.json"
+            metric = json.loads((self.root / path).read_text())
+            metric["epochs"][0]["caption_count"] = 500
+            write(self.root, path, metric)
+        def change_marker():
+            path = "dashboard/public/evidence.json"
+            evidence = json.loads((self.root / path).read_text())
+            evidence["captioning"]["comparison_review"]["observations_sha256"] = "0" * 64
+            write(self.root, path, evidence)
+        for change in (append_prediction, change_image, remove_asset, change_training, incomplete_training, change_marker):
+            with self.subTest(change=change.__name__):
+                self.comparison_fixture()
+                change()
+                result = project_snapshot(self.root, NOW)
+                self.assertEqual(result["predictions"], [])
+                self.assertIn("PREDICTIONS_NOT_VERIFIED", result["warnings"])
+        self.comparison_fixture()
+        (self.root / "work/final_observations.json").unlink()
+        result = project_snapshot(self.root, NOW)
+        self.assertEqual(result["predictions"], [])
+        self.assertNotIn("PREDICTIONS_NOT_VERIFIED", result["warnings"])
 
     def test_publisher_target_token_redirect_and_acknowledgement(self):
         token = read_token(True, stream=io.StringIO("UNIT_TEST_TOKEN\n"))
